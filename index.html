@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>UNO Firebase</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #2c3e50; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        #game-info { padding: 10px; background: #34495e; }
+        #status { font-weight: bold; color: #f1c40f; }
+        
+        #table { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
+        
+        .card-pile { width: 80px; height: 120px; border-radius: 8px; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; background: #95a5a6; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        
+        #hand-container { height: 160px; background: #222; overflow-x: auto; display: flex; align-items: center; padding: 0 10px; gap: 5px; }
+        
+        .card { 
+            min-width: 70px; height: 110px; border-radius: 6px; display: flex; align-items: center; justify-content: center; 
+            font-weight: bold; font-size: 20px; color: white; cursor: pointer; border: 2px solid #fff; position: relative;
+            transition: transform 0.2s;
+        }
+        .card:hover { transform: translateY(-10px); }
+
+        /* Couleurs UNO */
+        .Rouge { background: #e74c3c; }
+        .Bleu { background: #3498db; }
+        .Vert { background: #2ecc71; }
+        .Jaune { background: #f1c40f; color: black; }
+        .Noire { background: #2c3e50; border: 2px dashed white; } /* Dos de carte */
+
+        button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
+        button:disabled { background: #7f8c8d; }
+        
+        #controls { margin: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-info">
+        <div>Joueurs connectés: <span id="player-count">0</span></div>
+        <div id="status">Chargement...</div>
+    </div>
+
+    <div id="table">
+        <!-- La défausse -->
+        <div id="discard-pile" class="card-pile">?</div>
+        
+        <div id="controls">
+            <button id="btn-draw" onclick="drawCard()">Piocher</button>
+            <button id="btn-start" onclick="startGame()" style="display:none; background-color: #e67e22;">Démarrer la partie</button>
+        </div>
+    </div>
+
+    <div id="hand-container">
+        <!-- Les cartes du joueur iront ici -->
+    </div>
+
+    <!-- Import Firebase Modular SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update, push, runTransaction, get } 
+        from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+        // ------------------------------------------------------------------
+        // CONFIGURATION FIREBASE (A REMPLACER PAR LA VOTRE)
+        // ------------------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            authDomain: "votre-projet.firebaseapp.com",
+            databaseURL: "https://votre-projet-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "votre-projet",
+            storageBucket: "votre-projet.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:xxxxxxxxxxxx"
+        };
+
+        // Initialisation
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Identifiant unique local pour ce téléphone (stocké dans le navigateur)
+        let myId = localStorage.getItem('uno_player_id');
+        if (!myId) {
+            myId = 'player_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('uno_player_id', myId);
+        }
+
+        const ROOM_ID = "salon_1"; // Une seule salle pour l'instant
+        const gameRef = ref(db, 'games/' + ROOM_ID);
+        let gameState = null;
+        let myHand = [];
+
+        // --- GESTION DE LA CONNEXION ---
+        // S'ajouter à la liste des joueurs
+        const playerRef = ref(db, `games/${ROOM_ID}/players/${myId}`);
+        set(playerRef, {
+            name: "Joueur " + myId.substr(0,4),
+            active: true
+        });
+
+        // Supprimer le joueur s'il quitte (optionnel mais propre)
+        // onDisconnect(playerRef).remove(); 
+
+        // --- ECOUTER LES MISES A JOUR DE LA DATABASE ---
+        onValue(gameRef, (snapshot) => {
+            gameState = snapshot.val();
+            
+            if (!gameState) {
+                document.getElementById('status').innerText = "En attente de lancement...";
+                document.getElementById('btn-start').style.display = 'inline-block';
+                return;
+            }
+
+            // Mise à jour du compteur de joueurs
+            const players = gameState.players || {};
+            const playerIds = Object.keys(players);
+            document.getElementById('player-count').innerText = playerIds.length;
+
+            // Afficher bouton start seulement si pas commencé et au moins 2 joueurs
+            if (!gameState.started && playerIds.length >= 2) {
+                document.getElementById('btn-start').style.display = 'inline-block';
+            } else {
+                document.getElementById('btn-start').style.display = 'none';
+            }
+
+            if (gameState.started) {
+                renderGame();
+            }
+        });
+
+        // --- FONCTIONS DU JEU (Exportées globalement pour les onclick HTML) ---
+        
+        window.startGame = function() {
+            // Générer le deck
+            const colors = ['Rouge', 'Bleu', 'Vert', 'Jaune'];
+            const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']; // Simplifié
+            let deck = [];
+            
+            colors.forEach(c => values.forEach(v => {
+                deck.push({ color: c, value: v });
+                deck.push({ color: c, value: v });
+            }));
+            
+            // Mélanger
+            deck.sort(() => Math.random() - 0.5);
+
+            // Distribuer
+            get(ref(db, `games/${ROOM_ID}/players`)).then((snap) => {
+                const players = snap.val();
+                const pIds = Object.keys(players);
+                let updates = {};
+
+                pIds.forEach(pid => {
+                    updates[`games/${ROOM_ID}/players/${pid}/hand`] = deck.splice(0, 7);
+                });
+
+                const firstCard = deck.pop();
+
+                updates[`games/${ROOM_ID}/deck`] = deck;
+                updates[`games/${ROOM_ID}/discard`] = firstCard;
+                updates[`games/${ROOM_ID}/currentTurn`] = pIds[0]; // Le premier commence
+                updates[`games/${ROOM_ID}/order`] = pIds; // Ordre du tour
+                updates[`games/${ROOM_ID}/started`] = true;
+
+                update(ref(db), updates);
+            });
+        };
+
+        window.drawCard = function() {
+            if (!isMyTurn()) return;
+            
+            // Logique simplifiée : on prend une carte du "deck" virtuel (si vide on triche pour l'exemple)
+            // Dans une vraie app il faudrait gérer le mélange de la défausse
+            const deck = gameState.deck || [];
+            if(deck.length === 0) return alert("Plus de cartes !");
+
+            const card = deck.pop(); // On retire la dernière
+            
+            // Mise à jour atomique
+            let myNewHand = gameState.players[myId].hand || [];
+            myNewHand.push(card);
+
+            update(ref(db, `games/${ROOM_ID}`), {
+                deck: deck,
+                [`players/${myId}/hand`]: myNewHand
+            }).then(() => nextTurn());
+        };
+
+        window.playCard = function(index) {
+            if (!isMyTurn()) return;
+
+            const card = gameState.players[myId].hand[index];
+            const topCard = gameState.discard;
+
+            if (card.color === topCard.color || card.value === topCard.value) {
+                // Coup valide
+                let newHand = [...gameState.players[myId].hand];
+                newHand.splice(index, 1);
+
+                let updates = {};
+                updates[`games/${ROOM_ID}/discard`] = card;
+                updates[`games/${ROOM_ID}/players/${myId}/hand`] = newHand;
+                
+                // Gérer la victoire
+                if (newHand.length === 0) {
+                    updates[`games/${ROOM_ID}/winner`] = myId;
+                    updates[`games/${ROOM_ID}/started`] = false; // Reset
+                    alert("Gagné !");
+                }
+
+                update(ref(db), updates).then(() => {
+                    if (newHand.length > 0) nextTurn();
+                });
+            } else {
+                alert("Carte invalide !");
+            }
+        };
+
+        // --- LOGIQUE INTERNE ---
+
+        function isMyTurn() {
+            return gameState.currentTurn === myId;
+        }
+
+        function nextTurn() {
+            const order = gameState.order;
+            const currentIndex = order.indexOf(myId);
+            const nextIndex = (currentIndex + 1) % order.length;
+            const nextPlayerId = order[nextIndex];
+            
+            update(ref(db, `games/${ROOM_ID}`), {
+                currentTurn: nextPlayerId
+            });
+        }
+
+        function renderGame() {
+            // Afficher la défausse
+            const discardDiv = document.getElementById('discard-pile');
+            const topCard = gameState.discard;
+            discardDiv.className = `card-pile ${topCard.color}`;
+            discardDiv.innerText = topCard.value;
+
+            // Afficher le statut
+            const statusDiv = document.getElementById('status');
+            if (isMyTurn()) {
+                statusDiv.innerText = "C'EST À TOI DE JOUER !";
+                statusDiv.style.color = "#2ecc71";
+                document.body.style.border = "5px solid #2ecc71";
+            } else {
+                statusDiv.innerText = "Tour de l'adversaire...";
+                statusDiv.style.color = "#f1c40f";
+                document.body.style.border = "none";
+            }
+
+            // Afficher ma main
+            const handContainer = document.getElementById('hand-container');
+            handContainer.innerHTML = '';
+            
+            const myHand = gameState.players[myId].hand || [];
+            myHand.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = `card ${card.color}`;
+                cardEl.innerText = card.value;
+                cardEl.onclick = () => window.playCard(index); // Appel global
+                handContainer.appendChild(cardEl);
+            });
+        }
+    </script>
+</body>
+</html>
