@@ -2,11 +2,16 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>UNO Firebase + Complet</title>
+    <title>UNO Firebase + Complet & Robuste</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        /* Styles (inchangés, sauf ajustements mineurs) */
+        /* Styles généraux */
         body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #2c3e50; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* Conteneur principal du jeu (caché par défaut) */
+        #game-container { display: none; flex-direction: column; flex-grow: 1; }
+
+        /* Styles existants */
         #game-info { padding: 10px; background: #34495e; }
         #status { font-weight: bold; color: #f1c40f; }
         #table { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
@@ -22,7 +27,7 @@
         .Bleu { background: #3498db; }
         .Vert { background: #2ecc71; }
         .Jaune { background: #f1c40f; color: black; }
-        .Noire { background: #2c3e50; border: 2px dashed white; } /* Dos de carte */
+        .Noire { background: #2c3e50; border: 2px dashed white; } /* Dos de carte et Joker/Wild */
         button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
         button:disabled { background: #7f8c8d; }
         #controls { margin: 10px; }
@@ -36,7 +41,7 @@
             z-index: 10; /* Au-dessus des autres cartes */
         }
 
-        /* Nouvelles règles CSS pour la sélection de couleur */
+        /* Sélection de couleur (pour les Jokers) */
         #color-select {
             position: fixed;
             top: 50%;
@@ -65,23 +70,31 @@
 
         /* Style pour la sélection du salon */
         #room-selection {
-            padding: 20px;
-            background-color: #34495e;
-            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-grow: 1; /* Prend tout l'espace disponible */
         }
         #room-selection label {
             display: block;
             margin-bottom: 5px;
+            font-size: 1.2em;
         }
         #room-selection input[type="text"] {
-            padding: 8px;
-            border-radius: 5px;
-            border: none;
-            width: 200px;
-            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #ccc;
+            width: 250px;
+            margin-bottom: 15px;
+            font-size: 1em;
+            color: #333;
         }
         #room-selection button {
             background-color: #2980b9;
+            padding: 12px 25px;
+            font-size: 1.1em;
+            border-radius: 25px;
         }
     </style>
 </head>
@@ -91,38 +104,41 @@
     <div id="room-selection">
         <label for="room-id">Nom du salon:</label>
         <input type="text" id="room-id" placeholder="Entrez un nom de salon">
-        <button onclick="joinRoom()">Rejoindre le salon</button>
+        <button onclick="joinRoom()">Rejoindre ou Créer</button>
     </div>
 
-    <div id="game-info">
-        <div>Joueurs connectés: <span id="player-count">0</span></div>
-        <div id="status">Chargement...</div>
-    </div>
-
-    <!-- Affichage du nombre de cartes des adversaires -->
-    <div id="opponents">
-        <!-- Rempli dynamiquement par JavaScript -->
-    </div>
-
-    <div id="table">
-        <!-- La défausse -->
-        <div id="discard-pile" class="card-pile">?</div>
-        
-        <div id="controls">
-            <button id="btn-draw" onclick="drawCard()">Piocher</button>
-            <button id="btn-start" onclick="startGame()" style="display:none; background-color: #e67e22;">Démarrer la partie</button>
-            <button id="btn-quit" onclick="quitGame()" style="background-color: #c0392b;">Quitter la partie</button>
+    <!-- Conteneur principal du jeu -->
+    <div id="game-container">
+        <div id="game-info">
+            <div>Joueurs connectés: <span id="player-count">0</span></div>
+            <div id="status">Chargement...</div>
         </div>
 
-        <!-- Boutons UNO / Contre-UNO -->
-       <div class="uno-button-container">
-            <button id="btn-uno" onclick="callUno()" disabled>UNO</button>
-            <button id="btn-counter-uno" onclick="counterUno()" disabled>Contre UNO</button>
+        <!-- Affichage du nombre de cartes des adversaires -->
+        <div id="opponents">
+            <!-- Rempli dynamiquement par JavaScript -->
         </div>
-    </div>
 
-    <div id="hand-container">
-        <!-- Les cartes du joueur iront ici -->
+        <div id="table">
+            <!-- La défausse -->
+            <div id="discard-pile" class="card-pile">?</div>
+            
+            <div id="controls">
+                <button id="btn-draw" onclick="drawCard()">Piocher</button>
+                <button id="btn-start" onclick="startGame()" style="display:none; background-color: #e67e22;">Démarrer la partie</button>
+                <button id="btn-quit" onclick="quitGame()" style="background-color: #c0392b;">Quitter la partie</button>
+            </div>
+
+            <!-- Boutons UNO / Contre-UNO -->
+           <div class="uno-button-container">
+                <button id="btn-uno" onclick="callUno()" disabled>UNO</button>
+                <button id="btn-counter-uno" onclick="counterUno()" disabled>Contre UNO</button>
+            </div>
+        </div>
+
+        <div id="hand-container">
+            <!-- Les cartes du joueur iront ici -->
+        </div>
     </div>
 
     <!-- Sélection de couleur (pour les Jokers) -->
@@ -137,7 +153,7 @@
     <!-- Import Firebase Modular SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, push, remove, onDisconnect } 
+        import { getDatabase, ref, set, onValue, update, remove, onDisconnect, get } 
         from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
         // ------------------------------------------------------------------
@@ -154,93 +170,134 @@
           measurementId: "G-14ZHV63WTD"
         };
 
-        // Initialisation
+        // Initialisation Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Identifiant unique local pour ce téléphone
+        // Identifiant unique local pour ce joueur
         let myId = localStorage.getItem('uno_player_id');
         if (!myId) {
             myId = 'player_' + Math.random().toString(36).substr(2, 9);
             localStorage.setItem('uno_player_id', myId);
         }
 
-        let ROOM_ID = null; // Le salon est défini lors de la connexion
-        let gameRef = null;
+        let ROOM_ID = null;
+        let gameRef = null; // Référence à la salle de jeu
+        let playersRef = null; // Référence aux joueurs de la salle
+        let myPlayerRef = null; // Référence à mon joueur
         let gameState = null;
-        let myHand = [];
-        let unoCalled = false;
-        let cardBeingPlayed = null; // Stocke la carte en cours de jeu (pour les Jokers)
+        let unoCalled = false; // Pour suivre si j'ai annoncé UNO
+        let cardBeingPlayed = null; // Stocke la carte en cours de jeu (pour les Jokers/choix de couleur)
+        let cardBeingPlayedIndex = null; // Index de la carte jouée pour l'animation
 
         // --- GESTION DU SALON ---
         window.joinRoom = function() {
             const roomIdInput = document.getElementById('room-id');
-            ROOM_ID = roomIdInput.value.trim();
+            const newRoomId = roomIdInput.value.trim();
 
-            if (!ROOM_ID) {
+            if (!newRoomId) {
                 alert("Veuillez entrer un nom de salon.");
                 return;
             }
 
-            gameRef = ref(db, 'games/' + ROOM_ID);
-            setupGameListeners();
-            document.getElementById('room-selection').style.display = 'none'; // Cacher la sélection
-        };
+            // Si on change de salon, on nettoie les listeners précédents
+            if (gameRef) {
+                // Détacher les listeners précédents si nécessaire
+                // (Firebase gère bien le réattachement si la ref est la même,
+                // mais si ROOM_ID change, c'est une nouvelle ref)
+            }
 
-        function setupGameListeners() {
-            // --- GESTION DE LA CONNEXION ---
-            const playerRef = ref(db, `games/${ROOM_ID}/players/${myId}`);
-            set(playerRef, {
+            ROOM_ID = newRoomId;
+            gameRef = ref(db, 'games/' + ROOM_ID);
+            playersRef = ref(db, `games/${ROOM_ID}/players`);
+            myPlayerRef = ref(db, `games/${ROOM_ID}/players/${myId}`);
+
+            // Enregistrer le joueur et configurer onDisconnect
+            set(myPlayerRef, {
                 name: "Joueur " + myId.substr(0,4),
                 active: true,
                 unoCalled: false
+            }).then(() => {
+                onDisconnect(myPlayerRef).remove().then(() => {
+                    // Ce callback s'exécute quand le client se déconnecte
+                    // Il faut aussi gérer le nettoyage du salon ici
+                    // (mais on a déjà un onValue global pour ça, c'est plus fiable)
+                });
+                console.log(`Connecté au salon : ${ROOM_ID} en tant que ${myId}`);
+                setupGameListeners();
+                document.getElementById('room-selection').style.display = 'none';
+                document.getElementById('game-container').style.display = 'flex';
+            }).catch(error => {
+                console.error("Erreur de connexion au salon:", error);
+                alert("Impossible de se connecter au salon. Veuillez réessayer.");
             });
+        };
 
-            onDisconnect(playerRef).remove().then(() => {
-                // Nettoyer le salon si plus personne
-                cleanupRoom();
-            });
-
-            // --- ECOUTER LES MISES A JOUR DE LA DATABASE ---
+        function setupGameListeners() {
+            // Listener principal sur l'état du jeu
             onValue(gameRef, (snapshot) => {
                 gameState = snapshot.val();
-
-                if (!gameState) {
+                
+                if (!gameState || !gameState.started) {
                     document.getElementById('status').innerText = "En attente de lancement...";
-                    document.getElementById('btn-start').style.display = 'inline-block';
-                    return;
                 }
 
-                // Mise à jour du compteur de joueurs
-                const players = gameState.players || {};
-                const playerIds = Object.keys(players);
-                document.getElementById('player-count').innerText = playerIds.length;
-
-                // Afficher bouton start seulement si pas commencé et au moins 2 joueurs
-                if (!gameState.started && playerIds.length >= 2) {
-                    document.getElementById('btn-start').style.display = 'inline-block';
-                } else {
-                    document.getElementById('btn-start').style.display = 'none';
+                // Vérifier si la partie est terminée (par exemple, un gagnant)
+                if (gameState && gameState.winner) {
+                    alert(`La partie est terminée ! ${gameState.players[gameState.winner].name} a gagné !`);
+                    // Optionnel: Réinitialiser la partie ou déconnecter tout le monde
+                    // set(gameRef, null); // Supprimer la salle après victoire
                 }
 
-                if (gameState.started) {
-                    renderGame();
+                renderGame();
+            });
+
+            // Listener spécifique pour les joueurs afin de déclencher le nettoyage du salon
+            onValue(playersRef, (snapshot) => {
+                const playersData = snapshot.val();
+                if (!playersData || Object.keys(playersData).length === 0) {
+                    console.log(`Le salon ${ROOM_ID} est vide, suppression...`);
+                    remove(gameRef)
+                        .then(() => {
+                            console.log(`Salon ${ROOM_ID} supprimé.`);
+                            // Réinitialiser l'interface pour la sélection de salon
+                            ROOM_ID = null;
+                            gameRef = null;
+                            playersRef = null;
+                            myPlayerRef = null;
+                            gameState = null;
+                            document.getElementById('game-container').style.display = 'none';
+                            document.getElementById('room-selection').style.display = 'flex';
+                            document.getElementById('room-id').value = '';
+                            alert("Le salon est vide et a été fermé.");
+                        })
+                        .catch(error => console.error("Erreur lors de la suppression du salon:", error));
                 }
             });
         }
 
-        // --- FONCTIONS DU JEU (Exportées globalement pour les onclick HTML) ---
+        // --- FONCTIONS DU JEU ---
         
         window.startGame = function() {
+            if (!gameState || gameState.started) return; // Ne pas démarrer si déjà démarré
+            const players = gameState.players || {};
+            const pIds = Object.keys(players);
+            if (pIds.length < 2) {
+                alert("Il faut au moins 2 joueurs pour démarrer une partie !");
+                return;
+            }
+
             // Générer le deck
             const colors = ['Rouge', 'Bleu', 'Vert', 'Jaune'];
-            const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+2', 'Sens', 'Passe']; // Sans Joker ici
+            const standardValues = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+2', 'Sens', 'Passe'];
             let deck = [];
             
-            colors.forEach(c => values.forEach(v => {
-                deck.push({ color: c, value: v });
-                if(v !== '0') deck.push({ color: c, value: v }); // Deux fois sauf le 0
-            }));
+            colors.forEach(c => {
+                standardValues.forEach(v => {
+                    deck.push({ color: c, value: v });
+                    if(v !== '0') deck.push({ color: c, value: v }); // Deux fois sauf le 0
+                });
+            });
             
             // Ajouter les Jokers et +4 (4 de chaque)
             for (let i = 0; i < 4; i++) {
@@ -251,178 +308,221 @@
             // Mélanger
             deck.sort(() => Math.random() - 0.5);
 
-            // Distribuer
-            get(ref(db, `games/${ROOM_ID}/players`)).then((snap) => {
-                const players = snap.val();
-                const pIds = Object.keys(players);
-                let updates = {};
-
-                pIds.forEach(pid => {
-                    updates[`games/${ROOM_ID}/players/${pid}/hand`] = deck.splice(0, 7);
-                    updates[`games/${ROOM_ID}/players/${pid}/unoCalled`] = false; // Réinitialiser le UNO
-                });
-
-                const firstCard = deck.pop();
-                
-                updates[`games/${ROOM_ID}/deck`] = deck;
-                updates[`games/${ROOM_ID}/discard`] = firstCard;
-                updates[`games/${ROOM_ID}/currentTurn`] = pIds[0]; // Le premier commence
-                updates[`games/${ROOM_ID}/order`] = pIds; // Ordre du tour
-                updates[`games/${ROOM_ID}/started`] = true;
-                updates[`games/${ROOM_ID}/direction`] = 1; // 1 = horaire, -1 = anti-horaire
-                updates[`games/${ROOM_ID}/unoChallenged`] = null; // Personne n'a contesté le UNO
-
-                update(ref(db), updates);
+            let updates = {};
+            pIds.forEach(pid => {
+                updates[`players/${pid}/hand`] = deck.splice(0, 7);
+                updates[`players/${pid}/unoCalled`] = false; // Réinitialiser le UNO
             });
+
+            // Piocher la première carte de la défausse
+            let firstDiscardCard = deck.pop();
+            // Assurer que la première carte n'est pas un joker (+4 ou Joker simple)
+            while (firstDiscardCard.value === '+4' || firstDiscardCard.value === 'Joker') {
+                deck.unshift(firstDiscardCard); // Remettre au début du deck
+                deck.sort(() => Math.random() - 0.5); // Remélanger
+                firstDiscardCard = deck.pop(); // Piocher une nouvelle carte
+            }
+
+            updates['deck'] = deck;
+            updates['discard'] = firstDiscardCard;
+            updates['discardPile'] = []; // Initialiser la pile de défausse
+            updates['currentTurn'] = pIds[0]; // Le premier commence
+            updates['order'] = pIds; // Ordre du tour
+            updates['started'] = true;
+            updates['direction'] = 1; // 1 = horaire, -1 = anti-horaire
+            updates['unoChallenged'] = null; // Personne n'a contesté le UNO
+
+            update(gameRef, updates);
         };
 
         window.drawCard = function() {
-            if (!isMyTurn()) return;
+            if (!isMyTurn() || document.getElementById('color-select').classList.contains('show')) return;
             
-            const deck = gameState.deck || [];
-            if(deck.length === 0) {
-                // Mélanger la défausse (sauf la carte du dessus) et la remettre comme deck
-                recycleDiscardPile();
-                return; // Réessayer après le mélange
-            }
-
-            const card = deck.pop();
+            // On veut piocher UNIQUMENT si le joueur n'a pas pu jouer
+            // Le joueur suivant doit être calculé après la pioche
+            let updates = {};
+            let deck = gameState.deck || [];
             let myNewHand = gameState.players[myId].hand || [];
+            
+            if (deck.length === 0) {
+                deck = recycleDiscardPile(); // Recycler et récupérer le nouveau deck
+                if (deck.length === 0) {
+                    alert("Plus de cartes dans le deck ou la défausse pour piocher !");
+                    return;
+                }
+            }
+            
+            const card = deck.shift(); // Piocher la première carte du deck
             myNewHand.push(card);
 
-            update(ref(db, `games/${ROOM_ID}`), {
-                deck: deck,
-                [`players/${myId}/hand`]: myNewHand
-            }).then(() => nextTurn());
+            updates['deck'] = deck;
+            updates[`players/${myId}/hand`] = myNewHand;
+            updates['currentTurn'] = getNextPlayerId(gameState.currentTurn); // Passer au joueur suivant
+
+            update(gameRef, updates)
+                .then(() => {
+                    // Après avoir pioché, le tour passe
+                    console.log("Carte piochée, tour passé.");
+                })
+                .catch(error => console.error("Erreur lors de la pioche:", error));
         };
 
         window.playCard = function(index) {
-            if (!isMyTurn()) return;
+            if (!isMyTurn() || document.getElementById('color-select').classList.contains('show')) return;
 
-            const card = gameState.players[myId].hand[index];
+            cardBeingPlayed = gameState.players[myId].hand[index];
+            cardBeingPlayedIndex = index; // Pour l'animation
             const topCard = gameState.discard;
 
-            // Vérification de la validité de la carte
-            if (isValidPlay(card, topCard)) {
-                cardBeingPlayed = card; // Stocker la carte pour les jokers
-
-                if (card.color === 'Noire') {
-                    // Joker ou +4 : afficher la sélection de couleur
+            if (isValidPlay(cardBeingPlayed, topCard)) {
+                if (cardBeingPlayed.color === 'Noire') {
                     document.getElementById('color-select').classList.add('show');
-                    return; // Attendre que le joueur choisisse une couleur
+                    // La fonction setColor() appellera playCardAction() après le choix de couleur
                 } else {
-                    // Jouer la carte normalement
-                    playCardAction(index, null);
+                    playCardAction(cardBeingPlayed, cardBeingPlayedIndex);
                 }
             } else {
-                alert("Carte invalide !");
+                alert("Carte invalide ! Vous ne pouvez jouer ni la couleur ni la valeur de la carte du dessus.");
             }
         };
 
-        // Fonction pour jouer la carte APRES avoir choisi la couleur (pour les jokers)
+        // Fonction appelée après la sélection de couleur pour les jokers
         window.setColor = function(color) {
             document.getElementById('color-select').classList.remove('show');
-            playCardAction(null, color); // Pas d'index ici, on sait qu'on joue `cardBeingPlayed`
+            if (cardBeingPlayed) {
+                // La carte jouée est une carte noire, on lui attribue la couleur choisie pour la défausse
+                cardBeingPlayed.chosenColor = color; 
+                playCardAction(cardBeingPlayed, cardBeingPlayedIndex);
+            }
         };
 
         function isValidPlay(card, topCard) {
             if (card.color === 'Noire') return true; // Joker toujours valide
-            return card.color === topCard.color || card.value === topCard.value;
+            // Si la carte du dessus a une "chosenColor" (pour les jokers précédents)
+            const currentTopColor = topCard.chosenColor || topCard.color;
+            return card.color === currentTopColor || card.value === topCard.value;
         }
 
-        function playCardAction(index, chosenColor) {
-            let card = cardBeingPlayed;
-
-            if (index !== null) {
-                card = gameState.players[myId].hand[index];
-            }
-
-            let newHand = [...gameState.players[myId].hand];
-            if (index !== null) {
-                newHand.splice(index, 1);
-            } else {
-                // Trouver l'index de `cardBeingPlayed` (car on ne l'a pas)
-                const cardIndex = newHand.findIndex(c => c.color === card.color && c.value === card.value);
-                if (cardIndex === -1) {
-                    console.error("Carte à jouer non trouvée dans la main !");
-                    return;
-                }
-                newHand.splice(cardIndex, 1);
-            }
-
+        function playCardAction(card, originalIndex) {
             let updates = {};
-            updates[`games/${ROOM_ID}/discard`] = card;
+            let myNewHand = [...gameState.players[myId].hand];
+            myNewHand.splice(originalIndex, 1);
+
+            // Ajouter la carte jouée à la pile de défausse "historique"
+            let discardPileHistory = gameState.discardPile || [];
+            discardPileHistory.push(gameState.discard); // L'ancienne carte de défausse
+
+            // La nouvelle carte de défausse
+            let newDiscardCard = {...card}; // Copie pour ne pas modifier l'originale de la main
+            if (card.chosenColor) { // Si c'était un joker et qu'une couleur a été choisie
+                newDiscardCard.color = card.chosenColor; // La carte jouée prend la couleur choisie
+            }
+
+            updates[`players/${myId}/hand`] = myNewHand;
+            updates[`players/${myId}/unoCalled`] = false;
+            updates['discard'] = newDiscardCard;
+            updates['discardPile'] = discardPileHistory;
+
+            let nextPlayerId = getNextPlayerId(gameState.currentTurn); // Joueur après moi
+            let finalNextPlayerId = nextPlayerId; // Le joueur dont c'est le tour final
 
             // Appliquer les effets de la carte
-            let nextPlayer = nextTurn(); // Obtenir le joueur suivant (mais ne pas l'appliquer tout de suite)
-
             switch (card.value) {
                 case '+2':
-                    drawPenaltyCards(nextPlayer, 2);
-                    nextPlayer = nextTurn(); // Sauter le joueur qui pioche
+                    applyDrawPenalty(nextPlayerId, 2, updates);
+                    finalNextPlayerId = getNextPlayerId(nextPlayerId); // Saute le joueur qui a pioché
                     break;
                 case 'Passe':
-                    nextPlayer = nextTurn(); // Sauter le joueur suivant
+                    finalNextPlayerId = getNextPlayerId(nextPlayerId); // Saute le joueur suivant
                     break;
                 case 'Sens':
-                    updates[`games/${ROOM_ID}/direction`] *= -1; // Inverser la direction
+                    updates['direction'] = gameState.direction * -1; // Inverser la direction
+                    // Re-calculer le prochain joueur après l'inversion
+                    finalNextPlayerId = getNextPlayerId(gameState.currentTurn, updates['direction']);
                     break;
                 case '+4':
-                    drawPenaltyCards(nextPlayer, 4);
-                    nextPlayer = nextTurn(); // Sauter le joueur qui pioche
+                    applyDrawPenalty(nextPlayerId, 4, updates);
+                    finalNextPlayerId = getNextPlayerId(nextPlayerId); // Saute le joueur qui a pioché
                     break;
-                case 'Joker':
-                    // La couleur est déjà choisie via setColor()
-                    card.color = chosenColor; // Mettre à jour la couleur du joker
-                    break;
+                // Joker n'a pas d'effet immédiat sur le tour ou la pioche, seulement sur la couleur
             }
 
-            updates[`games/${ROOM_ID}/players/${myId}/hand`] = newHand;
-            updates[`games/${ROOM_ID}/players/${myId}/unoCalled`] = false; // Reset UNO
-
-            if (newHand.length === 0) {
-                updates[`games/${ROOM_ID}/winner`] = myId;
-                updates[`games/${ROOM_ID}/started`] = false; // Reset
-                alert("Gagné !");
+            // Vérifier la victoire
+            if (myNewHand.length === 0) {
+                updates['winner'] = myId;
+                updates['started'] = false; // Arrête la partie
             }
-            else if(newHand.length === 1 && !unoCalled) {
-                alert("N'oublie pas de dire UNO!");
-            }
+            // Mettre à jour le prochain tour
+            updates['currentTurn'] = finalNextPlayerId;
 
-            animateCardMovement(index); // Effet visuel (simplifié)
+            animateCardMovement(originalIndex); // Effet visuel (simplifié)
 
-            // Appliquer le prochain tour APRES les effets
-            updates[`games/${ROOM_ID}/currentTurn`] = nextPlayer;
-
-            update(ref(db), updates).then(() => {
-                cardBeingPlayed = null; // Réinitialiser
-            });
+            update(gameRef, updates)
+                .then(() => {
+                    // Gestion "UNO" (pop-up uniquement, la règle de pioche est gérée par contre-uno)
+                    if (myNewHand.length === 1 && !unoCalled) {
+                        alert("Vous avez une carte ! N'oubliez pas de dire UNO !");
+                    }
+                    cardBeingPlayed = null; // Réinitialiser après avoir joué
+                    cardBeingPlayedIndex = null;
+                })
+                .catch(error => console.error("Erreur lors du jeu de la carte:", error));
         }
 
+        // Applique la pénalité de pioche en mettant à jour l'objet `updates`
+        function applyDrawPenalty(targetPlayerId, amount, updates) {
+            let deck = gameState.deck || [];
+            let targetPlayerHand = gameState.players[targetPlayerId].hand || [];
+
+            for (let i = 0; i < amount; i++) {
+                if (deck.length === 0) {
+                    deck = recycleDiscardPile(); // Recycler
+                    if (deck.length === 0) {
+                        console.warn("Plus de cartes dans le deck ou la défausse pour la pénalité !");
+                        break;
+                    }
+                }
+                targetPlayerHand.push(deck.shift()); // Piocher du DEBUT du deck
+            }
+            updates['deck'] = deck;
+            updates[`players/${targetPlayerId}/hand`] = targetPlayerHand;
+        }
+
+
         window.quitGame = function() {
-            remove(ref(db, `games/${ROOM_ID}/players/${myId}`)).then(() => {
-                // Réinitialiser l'état local
-                localStorage.removeItem('uno_player_id');
-                location.reload(); // Recharge la page
-            });
+            if (myPlayerRef) {
+                remove(myPlayerRef)
+                    .then(() => {
+                        localStorage.removeItem('uno_player_id');
+                        location.reload(); // Recharge la page
+                    })
+                    .catch(error => console.error("Erreur lors de la déconnexion:", error));
+            } else {
+                location.reload(); // Si pas connecté à un salon, juste recharger
+            }
         };
 
         window.callUno = function() {
-            unoCalled = true;
-            update(ref(db, `games/${ROOM_ID}/players/${myId}`, { unoCalled: true }));
+            if (gameState && gameState.players[myId].hand.length === 1) {
+                unoCalled = true;
+                update(myPlayerRef, { unoCalled: true })
+                    .then(() => alert("Vous avez dit UNO !"))
+                    .catch(error => console.error("Erreur lors de l'appel UNO:", error));
+            }
         };
 
         window.counterUno = function() {
-            if (gameState.unoChallenged) return; // Déjà contesté
+            if (!gameState || gameState.unoChallenged) return; // Déjà contesté ou pas d'état de jeu
 
-            const previousPlayerId = findPreviousPlayer();
+            const previousPlayerId = getPreviousPlayerId();
             const previousPlayer = gameState.players[previousPlayerId];
 
             if (previousPlayer && previousPlayer.hand && previousPlayer.hand.length === 1 && !previousPlayer.unoCalled) {
-                // Contre-UNO valide
                 alert("Contre-UNO réussi ! " + previousPlayer.name + " pioche 2 cartes.");
-                drawPenaltyCards(previousPlayerId, 2);
-                update(gameRef, { unoChallenged: myId });
+                let updates = {};
+                applyDrawPenalty(previousPlayerId, 2, updates);
+                updates['unoChallenged'] = myId; // Enregistrer qui a contesté
+                update(gameRef, updates);
             } else {
                 alert("Contre-UNO invalide !");
             }
@@ -431,84 +531,84 @@
         // --- LOGIQUE INTERNE ---
 
         function isMyTurn() {
-            return gameState.currentTurn === myId;
+            return gameState && gameState.currentTurn === myId;
         }
 
-        function nextTurn() {
+        function getNextPlayerId(currentTurnId, currentDirection = gameState.direction) {
             const order = gameState.order;
-            const currentIndex = order.indexOf(gameState.currentTurn);
-            let nextIndex = (currentIndex + gameState.direction + order.length) % order.length; // Gérer la direction
+            const currentIndex = order.indexOf(currentTurnId);
+            let nextIndex = (currentIndex + currentDirection + order.length) % order.length;
             return order[nextIndex];
         }
 
-        function findPreviousPlayer() {
+        function getPreviousPlayerId(currentDirection = gameState.direction) {
             const order = gameState.order;
             const currentIndex = order.indexOf(myId);
-            const previousIndex = (currentIndex - gameState.direction + order.length) % order.length;
+            // Pour le "Contre-UNO", c'est le joueur précédent PAR RAPPORT AU SENS DE JEU ACTUEL
+            // Donc si direction est -1, le "précédent" est en fait l'index +1
+            let previousIndex = (currentIndex - currentDirection + order.length) % order.length;
             return order[previousIndex];
         }
 
-        function drawPenaltyCards(playerId, amount) {
-            let deck = gameState.deck || [];
-            let playerHand = gameState.players[playerId].hand || [];
-
-            for (let i = 0; i < amount; i++) {
-                if (deck.length === 0) {
-                    recycleDiscardPile();
-                    deck = gameState.deck; // Récupérer le deck recyclé
-                    if(deck.length === 0) break; // Si toujours vide, on arrête
-                }
-                playerHand.push(deck.pop());
-            }
-
-            update(ref(db, `games/${ROOM_ID}`), {
-                deck: deck,
-                [`players/${playerId}/hand`]: playerHand
-            });
-        }
-
         function recycleDiscardPile() {
-            const discardPile = gameState.discard;
+            let currentDiscardCard = gameState.discard;
+            let discardPile = gameState.discardPile || [];
             let deck = gameState.deck || [];
 
-            // Récupérer toutes les cartes de la défausse SAUF la dernière carte jouée
-            const discardPileCards = Object.assign([], gameState.discardPile || []);
-
-            if(discardPile){
-                discardPileCards.push(discardPile);
+            if (discardPile.length === 0) {
+                console.warn("Pile de défausse vide pour le recyclage.");
+                return deck; // Rien à recycler
             }
 
-            if (discardPileCards.length > 0) {
-                // Mélanger les cartes de la défausse
-                discardPileCards.sort(() => Math.random() - 0.5);
+            // Récupérer toutes les cartes de la défausse pour les mélanger (sauf la carte du dessus qui reste sur la pile)
+            let cardsToRecycle = discardPile;
+            
+            // Mélanger
+            cardsToRecycle.sort(() => Math.random() - 0.5);
+            deck = deck.concat(cardsToRecycle); // Ajouter au deck existant
 
-                // Ajouter les cartes mélangées au deck
-                deck = deck.concat(discardPileCards);
-            }
-
-            update(ref(db, `games/${ROOM_ID}`), {
+            // Mettre à jour Firebase avec le nouveau deck et la pile de défausse vide
+            update(gameRef, {
                 deck: deck,
-                discardPile: null,
-                discard: discardPile // Remettre la carte du dessus
+                discardPile: [] // La pile de défausse est maintenant vide
             });
-        }
-
-        function cleanupRoom() {
-            get(ref(db, `games/${ROOM_ID}/players`)).then((snapshot) => {
-                const players = snapshot.val();
-                if (!players || Object.keys(players).length === 0) {
-                    // Plus de joueurs, on peut supprimer le salon
-                    remove(gameRef);
-                }
-            });
+            console.log("Défausse recyclée dans le deck.");
+            return deck; // Retourner le nouveau deck
         }
 
         function renderGame() {
+            if (!gameState) {
+                document.getElementById('status').innerText = "En attente de lancement...";
+                document.getElementById('btn-start').style.display = 'none'; // Pas de bouton start si pas de gameState
+                return;
+            }
+
+            // Mise à jour du compteur de joueurs
+            const players = gameState.players || {};
+            const playerIds = Object.keys(players);
+            document.getElementById('player-count').innerText = playerIds.length;
+
+            // Afficher bouton start seulement si pas commencé et au moins 2 joueurs
+            if (!gameState.started && playerIds.length >= 2) {
+                document.getElementById('btn-start').style.display = 'inline-block';
+            } else {
+                document.getElementById('btn-start').style.display = 'none';
+            }
+
             // Afficher la défausse
             const discardDiv = document.getElementById('discard-pile');
             const topCard = gameState.discard;
-            discardDiv.className = `card-pile ${topCard.color}`;
-            discardDiv.innerText = topCard.value;
+            if (topCard) {
+                discardDiv.className = `card-pile ${topCard.color}`;
+                discardDiv.innerText = topCard.value;
+                if (topCard.chosenColor) { // Si c'était un joker qui a une couleur choisie
+                    discardDiv.classList.remove(topCard.color); // Supprimer l'ancienne couleur Noire
+                    discardDiv.classList.add(topCard.chosenColor); // Appliquer la couleur choisie
+                }
+            } else {
+                discardDiv.className = `card-pile`;
+                discardDiv.innerText = "?";
+            }
 
             // Afficher le statut
             const statusDiv = document.getElementById('status');
@@ -517,34 +617,36 @@
                 statusDiv.style.color = "#2ecc71";
                 document.body.style.border = "5px solid #2ecc71";
             } else {
-                statusDiv.innerText = "Tour de l'adversaire...";
+                const currentPlayerName = gameState.players[gameState.currentTurn]?.name || "un joueur";
+                statusDiv.innerText = `Tour de ${currentPlayerName}...`;
                 statusDiv.style.color = "#f1c40f";
                 document.body.style.border = "none";
             }
-
+            
             // Afficher ma main
             const handContainer = document.getElementById('hand-container');
             handContainer.innerHTML = '';
             
-            const myHand = gameState.players[myId].hand || [];
+            const myHand = gameState.players[myId]?.hand || [];
             myHand.forEach((card, index) => {
                 const cardEl = document.createElement('div');
                 cardEl.className = `card ${card.color}`;
                 cardEl.innerText = card.value;
-                cardEl.onclick = () => window.playCard(index); // Appel global
+                cardEl.onclick = () => window.playCard(index);
                 handContainer.appendChild(cardEl);
             });
 
              // Activer/désactiver le bouton UNO
             const btnUno = document.getElementById('btn-uno');
-            if (myHand.length === 1 && !unoCalled) {
-                btnUno.disabled = false;
-            } else {
-                btnUno.disabled = true;
-            }
+            // Le joueur ne peut appeler UNO que si c'est son tour et qu'il n'a qu'une carte
+            btnUno.disabled = !(isMyTurn() && myHand.length === 1 && !unoCalled);
+            
             // Activer/désactiver le bouton Contre-UNO
             const btnCounterUno = document.getElementById('btn-counter-uno');
-            btnCounterUno.disabled = !gameState.unoChallenged; // Seulement si quelqu'un a dit UNO
+            // Le bouton Contre-UNO doit être activé si ce n'est pas mon tour, et si la condition est remplie
+            // Ici, on le désactive si mon tour, car je ne peux pas me contre-UNO moi-même.
+            // La logique de vérification de la condition sera dans counterUno()
+            btnCounterUno.disabled = (isMyTurn() || gameState.unoChallenged != null);
 
             renderOpponents();
         }
@@ -554,18 +656,31 @@
             opponentsDiv.innerHTML = ''; // Vider
 
             const players = gameState.players || {};
-            for (const playerId in players) {
+            const playerIds = gameState.order || Object.keys(players); // Utiliser l'ordre du jeu
+            
+            playerIds.forEach(playerId => {
                 if (playerId !== myId) {
                     const player = players[playerId];
+                    if (!player) return; // Le joueur pourrait être déconnecté entre temps
+
                     const opponentDiv = document.createElement('div');
                     opponentDiv.className = 'opponent';
+                    let opponentStatus = '';
+                    if (gameState.currentTurn === playerId) {
+                        opponentStatus = ' (À JOUER)';
+                        opponentDiv.style.fontWeight = 'bold';
+                        opponentDiv.style.color = '#fff';
+                    } else if (player.unoCalled) {
+                        opponentStatus = ' (UNO !)';
+                        opponentDiv.style.color = '#f1c40f'; // Couleur jaune pour UNO
+                    }
                     opponentDiv.innerHTML = `
-                        ${player.name}<br>
+                        ${player.name}${opponentStatus}<br>
                         Cartes: ${player.hand ? player.hand.length : 0}
                     `;
                     opponentsDiv.appendChild(opponentDiv);
                 }
-            }
+            });
         }
 
         function animateCardMovement(index) {
@@ -583,9 +698,10 @@
             // Créer une copie de la carte pour l'animation
             const animatedCard = cardElement.cloneNode(true);
             animatedCard.classList.add('card-animation');
-            animatedCard.style.position = 'absolute';
+            animatedCard.style.position = 'fixed'; // Utiliser fixed pour s'assurer qu'elle suit le viewport
             animatedCard.style.left = `${startRect.left}px`;
             animatedCard.style.top = `${startRect.top}px`;
+            animatedCard.style.margin = '0'; // Supprimer les marges héritées
             document.body.appendChild(animatedCard);
 
             // Forcer un repaint pour que la transition fonctionne
