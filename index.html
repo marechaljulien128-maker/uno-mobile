@@ -2,38 +2,42 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>UNO Firebase</title>
+    <title>UNO Firebase + Avancé</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #2c3e50; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
+        /* Styles existants (inchangés, sauf ajustements mineurs) */
         #game-info { padding: 10px; background: #34495e; }
         #status { font-weight: bold; color: #f1c40f; }
-        
         #table { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
-        
         .card-pile { width: 80px; height: 120px; border-radius: 8px; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; background: #95a5a6; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-        
         #hand-container { height: 160px; background: #222; overflow-x: auto; display: flex; align-items: center; padding: 0 10px; gap: 5px; }
-        
         .card { 
             min-width: 70px; height: 110px; border-radius: 6px; display: flex; align-items: center; justify-content: center; 
             font-weight: bold; font-size: 20px; color: white; cursor: pointer; border: 2px solid #fff; position: relative;
             transition: transform 0.2s;
         }
         .card:hover { transform: translateY(-10px); }
-
-        /* Couleurs UNO */
         .Rouge { background: #e74c3c; }
         .Bleu { background: #3498db; }
         .Vert { background: #2ecc71; }
         .Jaune { background: #f1c40f; color: black; }
         .Noire { background: #2c3e50; border: 2px dashed white; } /* Dos de carte */
-
         button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
         button:disabled { background: #7f8c8d; }
-        
         #controls { margin: 10px; }
+
+        /* Nouveaux styles */
+        #opponents { display: flex; justify-content: space-around; width: 100%; padding: 10px; }
+        .opponent { text-align: center; }
+        .uno-button-container { display: flex; justify-content: center; margin-top: 10px; }
+        .uno-button-container button { margin: 0 10px; }
+        .card-animation {
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+            position: absolute;
+            z-index: 10; /* Au-dessus des autres cartes */
+        }
     </style>
 </head>
 <body>
@@ -43,6 +47,11 @@
         <div id="status">Chargement...</div>
     </div>
 
+    <!-- Affichage du nombre de cartes des adversaires -->
+    <div id="opponents">
+        <!-- Rempli dynamiquement par JavaScript -->
+    </div>
+
     <div id="table">
         <!-- La défausse -->
         <div id="discard-pile" class="card-pile">?</div>
@@ -50,6 +59,13 @@
         <div id="controls">
             <button id="btn-draw" onclick="drawCard()">Piocher</button>
             <button id="btn-start" onclick="startGame()" style="display:none; background-color: #e67e22;">Démarrer la partie</button>
+            <button id="btn-quit" onclick="quitGame()" style="background-color: #c0392b;">Quitter la partie</button>
+        </div>
+
+        <!-- Boutons UNO / Contre-UNO -->
+       <div class="uno-button-container">
+            <button id="btn-uno" onclick="callUno()" disabled>UNO</button>
+            <button id="btn-counter-uno" onclick="counterUno()" disabled>Contre UNO</button>
         </div>
     </div>
 
@@ -60,7 +76,7 @@
     <!-- Import Firebase Modular SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, push, runTransaction, get } 
+        import { getDatabase, ref, set, onValue, update, push, runTransaction, get, remove } 
         from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
         // ------------------------------------------------------------------
@@ -93,13 +109,14 @@
         const gameRef = ref(db, 'games/' + ROOM_ID);
         let gameState = null;
         let myHand = [];
+        let unoCalled = false; // Pour suivre si j'ai annoncé UNO
 
         // --- GESTION DE LA CONNEXION ---
-        // S'ajouter à la liste des joueurs
         const playerRef = ref(db, `games/${ROOM_ID}/players/${myId}`);
         set(playerRef, {
             name: "Joueur " + myId.substr(0,4),
-            active: true
+            active: true,
+            unoCalled: false // Initialiser
         });
 
         // Supprimer le joueur s'il quitte (optionnel mais propre)
@@ -137,13 +154,18 @@
         window.startGame = function() {
             // Générer le deck
             const colors = ['Rouge', 'Bleu', 'Vert', 'Jaune'];
-            const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']; // Simplifié
+            const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+2', 'Sens', 'Passe', 'Joker', '+4']; // Complet
             let deck = [];
             
             colors.forEach(c => values.forEach(v => {
                 deck.push({ color: c, value: v });
-                deck.push({ color: c, value: v });
+                if(v !== '0' && v !== 'Joker' && v !== '+4') deck.push({ color: c, value: v }); // Deux fois sauf le 0 et les spéciales
             }));
+            // Jokers
+            for(let i = 0; i < 4; i++) {
+                deck.push({ color: 'Noire', value: 'Joker' });
+                deck.push({ color: 'Noire', value: '+4' });
+            }
             
             // Mélanger
             deck.sort(() => Math.random() - 0.5);
@@ -156,6 +178,7 @@
 
                 pIds.forEach(pid => {
                     updates[`games/${ROOM_ID}/players/${pid}/hand`] = deck.splice(0, 7);
+                    updates[`games/${ROOM_ID}/players/${pid}/unoCalled`] = false; // Réinitialiser le UNO
                 });
 
                 const firstCard = deck.pop();
@@ -165,6 +188,7 @@
                 updates[`games/${ROOM_ID}/currentTurn`] = pIds[0]; // Le premier commence
                 updates[`games/${ROOM_ID}/order`] = pIds; // Ordre du tour
                 updates[`games/${ROOM_ID}/started`] = true;
+                updates[`games/${ROOM_ID}/unoChallenged`] = null; // Personne n'a contesté le UNO
 
                 update(ref(db), updates);
             });
@@ -196,7 +220,7 @@
             const card = gameState.players[myId].hand[index];
             const topCard = gameState.discard;
 
-            if (card.color === topCard.color || card.value === topCard.value) {
+            if (card.color === topCard.color || card.value === topCard.value || card.color === 'Noire') { // Carte noire = Joker
                 // Coup valide
                 let newHand = [...gameState.players[myId].hand];
                 newHand.splice(index, 1);
@@ -204,19 +228,59 @@
                 let updates = {};
                 updates[`games/${ROOM_ID}/discard`] = card;
                 updates[`games/${ROOM_ID}/players/${myId}/hand`] = newHand;
-                
+                updates[`games/${ROOM_ID}/players/${myId}/unoCalled`] = false; // Reset UNO
+
                 // Gérer la victoire
                 if (newHand.length === 0) {
                     updates[`games/${ROOM_ID}/winner`] = myId;
                     updates[`games/${ROOM_ID}/started`] = false; // Reset
                     alert("Gagné !");
                 }
+                else if(newHand.length === 1 && !unoCalled) {
+                    alert("N'oublie pas de dire UNO!");
+                }
+
+                // Effet visuel (simplifié)
+                animateCardMovement(index);
 
                 update(ref(db), updates).then(() => {
                     if (newHand.length > 0) nextTurn();
                 });
             } else {
                 alert("Carte invalide !");
+            }
+        };
+
+        window.quitGame = function() {
+            remove(ref(db, `games/${ROOM_ID}/players/${myId}`)).then(() => {
+                // Réinitialiser l'état local (important !)
+                localStorage.removeItem('uno_player_id');
+                location.reload(); // Recharge la page pour forcer une nouvelle connexion
+            });
+        };
+
+        window.callUno = function() {
+            unoCalled = true;
+            update(playerRef, { unoCalled: true });
+        };
+
+        window.counterUno = function() {
+            if (gameState.unoChallenged) return; // Déjà contesté
+
+            const previousPlayerId = findPreviousPlayer(); // Trouver le joueur précédent
+            const previousPlayer = gameState.players[previousPlayerId];
+
+            if (previousPlayer && previousPlayer.hand && previousPlayer.hand.length === 1 && !previousPlayer.unoCalled) {
+                // Contre-UNO valide
+                alert("Contre-UNO réussi ! " + previousPlayer.name + " pioche 2 cartes.");
+
+                // Piocher 2 cartes pour le joueur précédent
+                drawPenaltyCards(previousPlayerId, 2);
+
+                // Indiquer qu'il y a eu un contre-UNO
+                update(gameRef, { unoChallenged: myId });
+            } else {
+                alert("Contre-UNO invalide !");
             }
         };
 
@@ -234,6 +298,28 @@
             
             update(ref(db, `games/${ROOM_ID}`), {
                 currentTurn: nextPlayerId
+            });
+        }
+
+        function findPreviousPlayer() {
+            const order = gameState.order;
+            const currentIndex = order.indexOf(myId);
+            const previousIndex = (currentIndex - 1 + order.length) % order.length; // Pour gérer le retour au début
+            return order[previousIndex];
+        }
+
+        function drawPenaltyCards(playerId, amount) {
+            let deck = gameState.deck || [];
+            let playerHand = gameState.players[playerId].hand || [];
+
+            for (let i = 0; i < amount; i++) {
+                if (deck.length === 0) break; // Plus de cartes
+                playerHand.push(deck.pop());
+            }
+
+            update(ref(db, `games/${ROOM_ID}`), {
+                deck: deck,
+                [`players/${playerId}/hand`]: playerHand
             });
         }
 
@@ -268,6 +354,71 @@
                 cardEl.onclick = () => window.playCard(index); // Appel global
                 handContainer.appendChild(cardEl);
             });
+
+             // Activer/désactiver le bouton UNO
+            const btnUno = document.getElementById('btn-uno');
+            if (myHand.length === 1 && !unoCalled) {
+                btnUno.disabled = false;
+            } else {
+                btnUno.disabled = true;
+            }
+            // Activer/désactiver le bouton Contre-UNO
+            const btnCounterUno = document.getElementById('btn-counter-uno');
+            btnCounterUno.disabled = !gameState.unoChallenged; // Seulement si quelqu'un a dit UNO
+
+            renderOpponents();
+        }
+
+        function renderOpponents() {
+            const opponentsDiv = document.getElementById('opponents');
+            opponentsDiv.innerHTML = ''; // Vider
+
+            const players = gameState.players || {};
+            for (const playerId in players) {
+                if (playerId !== myId) {
+                    const player = players[playerId];
+                    const opponentDiv = document.createElement('div');
+                    opponentDiv.className = 'opponent';
+                    opponentDiv.innerHTML = `
+                        ${player.name}<br>
+                        Cartes: ${player.hand ? player.hand.length : 0}
+                    `;
+                    opponentsDiv.appendChild(opponentDiv);
+                }
+            }
+        }
+
+        function animateCardMovement(index) {
+            const cardElement = document.querySelector(`#hand-container > div:nth-child(${index + 1})`);
+
+            if (!cardElement) return;
+
+            // Position de départ (carte dans la main)
+            const startRect = cardElement.getBoundingClientRect();
+
+            // Position d'arrivée (pile de défausse)
+            const discardPile = document.getElementById('discard-pile');
+            const endRect = discardPile.getBoundingClientRect();
+
+            // Créer une copie de la carte pour l'animation
+            const animatedCard = cardElement.cloneNode(true);
+            animatedCard.classList.add('card-animation');
+            animatedCard.style.position = 'absolute';
+            animatedCard.style.left = `${startRect.left}px`;
+            animatedCard.style.top = `${startRect.top}px`;
+            document.body.appendChild(animatedCard);
+
+            // Forcer un repaint pour que la transition fonctionne
+            animatedCard.offsetWidth;
+
+            // Appliquer la transformation
+            animatedCard.style.transform = `translate(${endRect.left - startRect.left}px, ${endRect.top - startRect.top}px)`;
+            animatedCard.style.opacity = '0';
+
+            // Supprimer la carte animée après la transition
+            setTimeout(() => {
+                animatedCard.remove();
+            }, 500);
         }
     </script>
 </body>
